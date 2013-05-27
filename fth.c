@@ -150,6 +150,15 @@ threadmain(int argc, char **argv)
 
 	prog = argv;
 
+	if(argc == 0){
+		argc = 1;
+		argv = xargv;
+		argv[0] = getenv("FORTH");
+		if(argv[0] == nil)
+			argv[0] = "gforth";
+		argv[1] = 0;
+	}
+
 	if(name == nil){
 		if(argc > 0)
 			name = argv[0];
@@ -158,15 +167,6 @@ threadmain(int argc, char **argv)
 			if(name == nil)
 				name = "gnot";
 		}
-	}
-
-	if(argc == 0){
-		argc = 1;
-		argv = xargv;
-		argv[0] = getenv("FORTH");
-		if(argv[0] == nil)
-			argv[0] = "gforth";
-		argv[1] = 0;
 	}
 
 	/*
