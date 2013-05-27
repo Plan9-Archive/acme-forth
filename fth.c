@@ -133,6 +133,7 @@ threadmain(int argc, char **argv)
 	char buf1[128];
 	CFsys *fs;
 	char *dump;
+	char *xargv[2];
 	
 	dump = onestring(argc, argv);
 
@@ -157,6 +158,15 @@ threadmain(int argc, char **argv)
 			if(name == nil)
 				name = "gnot";
 		}
+	}
+
+	if(argc == 0){
+		argc = 1;
+		argv = xargv;
+		argv[0] = getenv("FORTH");
+		if(argv[0] == nil)
+			argv[0] = "gforth";
+		argv[1] = 0;
 	}
 
 	/*
@@ -344,6 +354,39 @@ nrunes(char *s, int nb)
 }
 
 void
+bodyinsert(Event *e)
+{
+	if(e->nr == 1 && e->r[0] == 0x7F) {
+		char buf[1];
+		fsprint(addrfd, "#%ud,#%ud", e->q0, e->q1);
+		fswrite(datafd, "", 0);
+		buf[0] = 0x7F;
+		write(rcfd, buf, 1);
+		return;
+	}
+	if(e->q0 < q.p){
+		if(debug)
+			fprint(2, "shift typing %d... ", e->q1-e->q0);
+		q.p += e->q1-e->q0;
+	}
+	else if(e->q0 <= q.p+ntyper){
+		if(debug)
+			fprint(2, "type->.. ");
+		type(e, rcfd, addrfd, datafd);
+	}
+}
+
+void
+bodydelete(Event *e)
+{
+	int n;
+	n = delete(e);
+	q.p -= n;
+	if(israw(rcfd) && e->q1 >= q.p+n)
+		sendbs(rcfd, n);
+}
+
+void
 stdinproc(void *v)
 {
 	CFid *cfd = ctlfd;
@@ -352,7 +395,6 @@ stdinproc(void *v)
 	CFid *afd = addrfd;
 	int fd0 = rcfd;
 	Event e, e2, e3, e4;
-	int n;
 
 	USED(v);
 
@@ -369,17 +411,17 @@ stdinproc(void *v)
 			print("unknown message %c%c\n", e.c1, e.c2);
 			break;
 
-		case 'E':	/* write to body or tag; can't affect us */
+		case 'E':
 			switch(e.c2){
 			case 'I':
-			case 'D':		/* body */
-				if(debug)
-					fprint(2, "shift typing %d... ", e.q1-e.q0);
-				q.p += e.q1-e.q0;
+				bodyinsert(&e);
 				break;
-			
-			case 'i':
-			case 'd':		/* tag */
+			case 'D':
+				bodydelete(&e);
+				break;
+		
+			case 'i':	/* write to tag; can't affect us */
+			case 'd':
 				break;
 			
 			default:
@@ -394,33 +436,11 @@ stdinproc(void *v)
 		case 'M':
 			switch(e.c2){
 			case 'I':
-				if(e.nr == 1 && e.r[0] == 0x7F) {
-					char buf[1];
-					fsprint(addrfd, "#%ud,#%ud", e.q0, e.q1);
-					fswrite(datafd, "", 0);
-					buf[0] = 0x7F;
-					write(fd0, buf, 1);
-					break;
-				}
-				if(e.q0 < q.p){
-					if(debug)
-						fprint(2, "shift typing %d... ", e.q1-e.q0);
-					q.p += e.q1-e.q0;
-				}
-				else if(e.q0 <= q.p+ntyper){
-					if(debug)
-						fprint(2, "type... ");
-					type(&e, fd0, afd, dfd);
-				}
+				bodyinsert(&e);
 				break;
-
 			case 'D':
-				n = delete(&e);
-				q.p -= n;
-				if(israw(fd0) && e.q1 >= q.p+n)
-					sendbs(fd0, n);
+				bodydelete(&e);
 				break;
-
 			case 'x':
 			case 'X':
 				if(e.flag & 2)
