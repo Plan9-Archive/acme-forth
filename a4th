@@ -1,0 +1,43 @@
+#!/usr/bin/env rc
+. 9.rc
+. $PLAN9/lib/acme.rc
+
+plumb $1
+
+# Find the acme window for $1
+x=`{9p read acme/index | awk '{print $1, $6}' | grep $1}
+winid=$x(1)
+xpath=$x(2)
+
+sleep 1
+o.fth &
+
+# We hope (!) the forth window is the last one created
+x=`{9p read acme/index | tail -1 | awk '{print $1}'}
+fthwin=$x(1)
+
+fn event {
+	# $1 - c1 origin of event
+	# $2 - c2 type of action
+	# $3 - q0 beginning of selection
+	# $4 - q1 end of selection
+	# $5 - eq0 beginning of expanded selection
+	# $6 - eq1 end of expanded selection
+	# $7 - flag
+	# $8 - nr number of runes in $9
+	# $9 - text
+	# $10 - chorded argument
+	# $11 - origin of chorded argument
+
+	switch($1$2){
+	case Mx MX
+		if(~ $9 Proc) {
+			str='s" '^$xpath'" included'
+			echo $str | 9p write acme/$fthwin/body
+		}
+		if not
+			winwriteevent $*
+	}
+}
+
+wineventloop
